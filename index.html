@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#F0F0F2">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Week Timer — 120h</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;600&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;font-family:'Outfit',sans-serif;overflow:hidden;-webkit-tap-highlight-color:transparent}
+body{display:flex;align-items:center;justify-content:center;position:relative;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  transition:background 0.8s ease}
+#ambient{position:absolute;top:38%;left:50%;transform:translate(-50%,-50%);width:420px;height:420px;
+  border-radius:50%;pointer-events:none;transition:background 0.8s ease}
+.wrap{display:flex;flex-direction:column;align-items:center;position:relative;z-index:1}
+#label{font-size:11px;font-weight:300;letter-spacing:0.3em;margin-bottom:24px;transition:color 0.8s ease}
+.ring-wrap{position:relative;width:280px;height:280px}
+canvas{position:absolute;top:0;left:0}
+.center{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center}
+#rem-label{font-size:10px;font-weight:300;letter-spacing:0.2em;text-transform:uppercase;margin-bottom:6px;transition:color 0.8s ease}
+#remaining{font-family:'JetBrains Mono',monospace;font-size:34px;font-weight:300;letter-spacing:0.02em;transition:color 0.8s ease}
+#remaining .sep{transition:color 0.8s ease}
+#now{font-size:12px;font-weight:300;margin-top:8px;transition:color 0.8s ease}
+.stats{display:flex;align-items:center;gap:32px;margin-top:32px}
+.stat-label{font-size:10px;font-weight:300;letter-spacing:0.2em;text-transform:uppercase;margin-bottom:6px}
+.stat-val{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:400;transition:color 0.8s ease}
+#divider{width:1px;height:32px;transition:background 0.8s ease}
+.bar-wrap{margin-top:32px;width:240px;height:2px;border-radius:1px;overflow:hidden;transition:background 0.8s ease}
+#bar{height:100%;border-radius:1px;transition:width 0.5s linear}
+#footer{margin-top:12px;font-size:10px;font-weight:300;letter-spacing:0.15em;transition:color 0.8s ease}
+</style>
+</head>
+<body>
+<div id="ambient"></div>
+<div class="wrap">
+  <div id="label"></div>
+  <div class="ring-wrap">
+    <canvas id="ring"></canvas>
+    <div class="center">
+      <div id="rem-label">Remaining</div>
+      <div id="remaining"><span class="h">00</span><span class="sep">:</span><span class="m">00</span><span class="sep">:</span><span class="s">00</span></div>
+      <div id="now"></div>
+    </div>
+  </div>
+  <div class="stats">
+    <div style="text-align:center">
+      <div class="stat-label">Elapsed</div>
+      <div class="stat-val" id="elapsed">0.0%</div>
+    </div>
+    <div id="divider"></div>
+    <div style="text-align:center">
+      <div class="stat-label">Left</div>
+      <div class="stat-val" id="left">100.0%</div>
+    </div>
+  </div>
+  <div class="bar-wrap" id="bar-wrap"><div id="bar"></div></div>
+  <div id="footer">120h（月〜金）</div>
+</div>
+
+<script>
+const DAY_THEMES = [
+  {bg:"#F5ECF0",ring:["#D4A0B4","#C890A4","#BC8098"],glow:"rgba(212,160,180,0.35)",glowAmbient:"rgba(212,160,180,0.06)",
+   text:"#2E2026",textSub:"rgba(46,32,38,0.5)",textMuted:"rgba(46,32,38,0.25)",accent:"#C890A4",sep:"rgba(200,144,164,0.5)",
+   trackBg:"rgba(46,32,38,0.07)",markerMain:"rgba(46,32,38,0.2)",markerSub:"rgba(46,32,38,0.07)",
+   hourLabel:"rgba(46,32,38,0.3)",divider:"rgba(46,32,38,0.07)",barFrom:"rgba(200,144,164,0.2)",barTo:"rgba(200,144,164,0.55)"},
+  {bg:"#F5EDE6",ring:["#C89840","#B88830","#A87828"],glow:"rgba(200,152,64,0.35)",glowAmbient:"rgba(200,152,64,0.06)",
+   text:"#2E2018",textSub:"rgba(46,32,24,0.5)",textMuted:"rgba(46,32,24,0.25)",accent:"#B88830",sep:"rgba(184,136,48,0.5)",
+   trackBg:"rgba(46,32,24,0.07)",markerMain:"rgba(46,32,24,0.2)",markerSub:"rgba(46,32,24,0.07)",
+   hourLabel:"rgba(46,32,24,0.3)",divider:"rgba(46,32,24,0.07)",barFrom:"rgba(184,136,48,0.2)",barTo:"rgba(184,136,48,0.55)"},
+  {bg:"#ECF2F5",ring:["#6AAAC8","#5A9AB8","#4A8AA8"],glow:"rgba(106,170,200,0.35)",glowAmbient:"rgba(106,170,200,0.06)",
+   text:"#202A2E",textSub:"rgba(32,42,46,0.5)",textMuted:"rgba(32,42,46,0.25)",accent:"#5A9AB8",sep:"rgba(90,154,184,0.5)",
+   trackBg:"rgba(32,42,46,0.07)",markerMain:"rgba(32,42,46,0.2)",markerSub:"rgba(32,42,46,0.07)",
+   hourLabel:"rgba(32,42,46,0.3)",divider:"rgba(32,42,46,0.07)",barFrom:"rgba(90,154,184,0.2)",barTo:"rgba(90,154,184,0.55)"},
+  {bg:"#EDF5EE",ring:["#6AB878","#5AA868","#4A9858"],glow:"rgba(106,184,120,0.35)",glowAmbient:"rgba(106,184,120,0.06)",
+   text:"#202E22",textSub:"rgba(32,46,34,0.5)",textMuted:"rgba(32,46,34,0.25)",accent:"#5AA868",sep:"rgba(90,168,104,0.5)",
+   trackBg:"rgba(32,46,34,0.07)",markerMain:"rgba(32,46,34,0.2)",markerSub:"rgba(32,46,34,0.07)",
+   hourLabel:"rgba(32,46,34,0.3)",divider:"rgba(32,46,34,0.07)",barFrom:"rgba(90,168,104,0.2)",barTo:"rgba(90,168,104,0.55)"},
+  {bg:"#F5F1E8",ring:["#C8A848","#B89838","#A88828"],glow:"rgba(200,168,72,0.35)",glowAmbient:"rgba(200,168,72,0.06)",
+   text:"#2E2A18",textSub:"rgba(46,42,24,0.5)",textMuted:"rgba(46,42,24,0.25)",accent:"#B89838",sep:"rgba(184,152,56,0.5)",
+   trackBg:"rgba(46,42,24,0.07)",markerMain:"rgba(46,42,24,0.2)",markerSub:"rgba(46,42,24,0.07)",
+   hourLabel:"rgba(46,42,24,0.3)",divider:"rgba(46,42,24,0.07)",barFrom:"rgba(184,152,56,0.2)",barTo:"rgba(184,152,56,0.55)"},
+];
+const WEEKEND = {bg:"#F0F0F2",ring:["#A0A3A8","#909398","#808388"],glow:"rgba(160,163,168,0.25)",glowAmbient:"rgba(160,163,168,0.04)",
+  text:"#2A2A2E",textSub:"rgba(42,42,46,0.5)",textMuted:"rgba(42,42,46,0.22)",accent:"#909398",sep:"rgba(144,147,152,0.4)",
+  trackBg:"rgba(42,42,46,0.07)",markerMain:"rgba(42,42,46,0.2)",markerSub:"rgba(42,42,46,0.07)",
+  hourLabel:"rgba(42,42,46,0.25)",divider:"rgba(42,42,46,0.07)",barFrom:"rgba(144,147,152,0.15)",barTo:"rgba(144,147,152,0.35)"};
+
+const TOTAL = 120*3600;
+const pad = n => String(n).padStart(2,'0');
+
+const canvas = document.getElementById('ring');
+const ctx = canvas.getContext('2d');
+const dpr = window.devicePixelRatio||1;
+const size = 280;
+canvas.width = size*dpr; canvas.height = size*dpr;
+canvas.style.width = size+'px'; canvas.style.height = size+'px';
+ctx.scale(dpr,dpr);
+const cx=size/2, cy=size/2, rad=120, lw=6, startA=-Math.PI/2;
+
+function getJST() {
+  const now = new Date();
+  const jst = new Date(now.toLocaleString('en-US',{timeZone:'Asia/Tokyo'}));
+  const dow = jst.getDay(), h = jst.getHours(), m = jst.getMinutes(), s = jst.getSeconds(), ms = now.getMilliseconds();
+  const month = jst.getMonth()+1, date = jst.getDate();
+  const isWE = dow===0||dow===6;
+  if (isWE) return {isWE:true, dateStr:`${month}月${date}日`, progress:1, rh:0, rm:0, rs:0, daysLeft:0, dayIndex:-1};
+  const off = dow-1;
+  const elapsed = off*86400+h*3600+m*60+s+ms/1000;
+  const rem = Math.max(0,TOTAL-elapsed);
+  return {isWE:false, dateStr:`${month}月${date}日 ${pad(h)}:${pad(m)}`,
+    progress:Math.min(1,elapsed/TOTAL), rh:Math.floor(rem/3600), rm:Math.floor((rem%3600)/60), rs:Math.floor(rem%60),
+    daysLeft:5-off, dayIndex:Math.min(off,4)};
+}
+
+function draw(t) {
+  const T = t.isWE ? WEEKEND : DAY_THEMES[t.dayIndex];
+  document.body.style.background = T.bg;
+  document.getElementById('ambient').style.background = `radial-gradient(circle, ${T.glowAmbient} 0%, transparent 70%)`;
+  
+  const label = t.isWE ? 'WEEKEND' : t.daysLeft<=1 ? '最終日' : `残り${t.daysLeft}日`;
+  document.getElementById('label').textContent = label;
+  document.getElementById('label').style.color = T.textMuted;
+  
+  const rl = document.getElementById('rem-label');
+  rl.textContent = t.isWE ? 'Complete' : 'Remaining';
+  rl.style.color = T.textMuted;
+  
+  const re = document.getElementById('remaining');
+  re.querySelector('.h').textContent = pad(t.rh);
+  re.querySelector('.m').textContent = pad(t.rm);
+  re.querySelector('.s').textContent = pad(t.rs);
+  re.style.color = T.text;
+  re.querySelectorAll('.sep').forEach(s => s.style.color = T.sep);
+  
+  const nw = document.getElementById('now');
+  nw.textContent = t.dateStr;
+  nw.style.color = T.textSub;
+  
+  document.getElementById('elapsed').textContent = (t.progress*100).toFixed(1)+'%';
+  document.getElementById('elapsed').style.color = T.accent;
+  document.getElementById('left').textContent = ((1-t.progress)*100).toFixed(1)+'%';
+  document.getElementById('left').style.color = T.accent;
+  
+  document.querySelectorAll('.stat-label').forEach(el => el.style.color = T.textMuted);
+  document.getElementById('divider').style.background = T.divider;
+  document.getElementById('bar-wrap').style.background = T.trackBg;
+  document.getElementById('bar').style.width = (t.progress*100)+'%';
+  document.getElementById('bar').style.background = `linear-gradient(90deg, ${T.barFrom}, ${T.barTo})`;
+  document.getElementById('footer').style.color = T.textMuted;
+
+  // Canvas
+  ctx.clearRect(0,0,size,size);
+  ctx.beginPath(); ctx.arc(cx,cy,rad,0,Math.PI*2);
+  ctx.strokeStyle=T.trackBg; ctx.lineWidth=lw; ctx.stroke();
+
+  const end = startA + t.progress*Math.PI*2;
+  const grad = ctx.createConicGradient(startA,cx,cy);
+  grad.addColorStop(0,T.ring[0]); grad.addColorStop(0.5,T.ring[1]); grad.addColorStop(1,T.ring[2]);
+  ctx.beginPath(); ctx.arc(cx,cy,rad,startA,end);
+  ctx.strokeStyle=grad; ctx.lineWidth=lw; ctx.lineCap='round'; ctx.stroke();
+
+  if (t.progress>0 && t.progress<1) {
+    const tx=cx+rad*Math.cos(end), ty=cy+rad*Math.sin(end);
+    const gl=ctx.createRadialGradient(tx,ty,0,tx,ty,14);
+    gl.addColorStop(0,T.glow); gl.addColorStop(1,'transparent');
+    ctx.beginPath(); ctx.arc(tx,ty,14,0,Math.PI*2); ctx.fillStyle=gl; ctx.fill();
+  }
+
+  for (let i=0;i<=5;i++) {
+    const a=startA+(i/5)*Math.PI*2;
+    ctx.beginPath();
+    ctx.moveTo(cx+(rad+12)*Math.cos(a),cy+(rad+12)*Math.sin(a));
+    ctx.lineTo(cx+(rad-4)*Math.cos(a),cy+(rad-4)*Math.sin(a));
+    ctx.strokeStyle=T.markerMain; ctx.lineWidth=2; ctx.lineCap='round'; ctx.stroke();
+  }
+  for (let i=0;i<20;i++) {
+    if (i%4===0) continue;
+    const a=startA+(i/20)*Math.PI*2;
+    ctx.beginPath();
+    ctx.moveTo(cx+(rad+8)*Math.cos(a),cy+(rad+8)*Math.sin(a));
+    ctx.lineTo(cx+(rad-2)*Math.cos(a),cy+(rad-2)*Math.sin(a));
+    ctx.strokeStyle=T.markerSub; ctx.lineWidth=1; ctx.lineCap='round'; ctx.stroke();
+  }
+  const days=["月","火","水","木","金"];
+  ctx.font="300 11px 'Outfit',sans-serif";
+  ctx.fillStyle=T.hourLabel; ctx.textAlign='center'; ctx.textBaseline='middle';
+  days.forEach((d,i) => {
+    const a=startA+((i+0.5)/5)*Math.PI*2;
+    ctx.fillText(d,cx+(rad-26)*Math.cos(a),cy+(rad-26)*Math.sin(a));
+  });
+}
+
+function tick() { draw(getJST()); requestAnimationFrame(tick); }
+tick();
+</script>
+</body>
+</html>
+
+{
+  "name": "Week Timer — 120h",
+  "short_name": "Week Timer",
+  "description": "120-hour weekly countdown timer (Mon-Fri) synced to JST",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F0F0F2",
+  "theme_color": "#F0F0F2",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
+
+const CACHE = 'week-timer-v1';
+const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
+
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))));
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', e => {
+  e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
+});
